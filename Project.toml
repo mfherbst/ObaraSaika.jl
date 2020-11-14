@@ -1,0 +1,13 @@
+name = "ObaraSaika"
+uuid = "b41fb182-4529-41f5-8c95-569560f9f6de"
+authors = ["Michael F. Herbst <info@michael-herbst.com> and contributors"]
+version = "0.0.0"
+
+[compat]
+julia = "1.5"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
