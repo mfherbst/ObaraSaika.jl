@@ -25,9 +25,9 @@ import ObaraSaika: ERI, compute_integrals, boys, compute_normalisation
         mol  = pyimport("pyscf.gto").M(basis=bas, atom="H 0 0 0", spin=1, unit="Bohr")
         ref = mol.intor("int2e")
 
-        #                    c    zeta  P          am
-        basis_functions = [[(1.0, 1.5, [0, 0, 0], [0, 0, 0])],
-                           [(1.0, 0.9, [0, 0, 0], [0, 0, 0])]]
+        #                    c    zeta  P         am
+        basis_functions = [[(1.0, 1.5, [0, 0, 0], 0)],
+                           [(1.0, 0.9, [0, 0, 0], 0)]]
         res = compute_integrals(ERI(), basis_functions)
         @test res ≈ ref
     end
@@ -37,9 +37,9 @@ import ObaraSaika: ERI, compute_integrals, boys, compute_normalisation
         mol  = pyimport("pyscf.gto").M(basis=bas, atom="H 0 0 0; H 0 1 0", unit="Bohr")
         ref = mol.intor("int2e")
 
-        #                    c    zeta  P          am
-        basis_functions = [[(1.0, 1.0, [0, 0, 0], [0, 0, 0])],
-                           [(1.0, 1.0, [0, 1, 0], [0, 0, 0])]]
+        #                    c    zeta  P         am
+        basis_functions = [[(1.0, 1.0, [0, 0, 0], 0)],
+                           [(1.0, 1.0, [0, 1, 0], 0)]]
         res = compute_integrals(ERI(), basis_functions)
         @test res ≈ ref
     end
@@ -49,9 +49,9 @@ import ObaraSaika: ERI, compute_integrals, boys, compute_normalisation
         ref = mol.intor("int2e")
 
         #                    c           zeta         P         am
-        basis_functions = [[(0.15432897, 3.42525091, [0, 0, 0], [0, 0, 0]),
-                            (0.53532814, 0.62391373, [0, 0, 0], [0, 0, 0]),
-                            (0.44463454, 0.16885540, [0, 0, 0], [0, 0, 0])]]
+        basis_functions = [[(0.15432897, 3.42525091, [0, 0, 0], 0),
+                            (0.53532814, 0.62391373, [0, 0, 0], 0),
+                            (0.44463454, 0.16885540, [0, 0, 0], 0)]]
         res = compute_integrals(ERI(), basis_functions)
         @test res ≈ ref atol=1e-7  # TODO That's not a great agreement
     end
@@ -61,12 +61,12 @@ import ObaraSaika: ERI, compute_integrals, boys, compute_normalisation
         ref = mol.intor("int2e")
 
         #                    c           zeta         P         am
-        basis_functions = [[(0.15432897, 3.42525091, [0, 0, 0], [0, 0, 0]),
-                            (0.53532814, 0.62391373, [0, 0, 0], [0, 0, 0]),
-                            (0.44463454, 0.16885540, [0, 0, 0], [0, 0, 0])],
-                           [(0.15432897, 3.42525091, [0, 1, 0], [0, 0, 0]),
-                            (0.53532814, 0.62391373, [0, 1, 0], [0, 0, 0]),
-                            (0.44463454, 0.16885540, [0, 1, 0], [0, 0, 0])]]
+        basis_functions = [[(0.15432897, 3.42525091, [0, 0, 0], 0),
+                            (0.53532814, 0.62391373, [0, 0, 0], 0),
+                            (0.44463454, 0.16885540, [0, 0, 0], 0)],
+                           [(0.15432897, 3.42525091, [0, 1, 0], 0),
+                            (0.53532814, 0.62391373, [0, 1, 0], 0),
+                            (0.44463454, 0.16885540, [0, 1, 0], 0)]]
         res = compute_integrals(ERI(), basis_functions)
         @test res ≈ ref atol=1e-7  # TODO That's not a great agreement
     end
