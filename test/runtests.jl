@@ -70,4 +70,21 @@ import ObaraSaika: ERI, compute_integrals, boys, compute_normalisation
         res = compute_integrals(ERI(), basis_functions)
         @test res ≈ ref atol=1e-7  # TODO That's not a great agreement
     end
+
+    @testset "Be 3-21G" begin
+        mol  = pyimport("pyscf.gto").M(basis="3-21g", atom="Be 0 0 0", unit="Bohr")
+        ref = mol.intor("int2e")
+        #                    c           zeta         P         am
+        basis_functions = [[( 0.0644263, 71.8876000, [0, 0, 0], 0),
+                            ( 0.3660960, 10.7289000, [0, 0, 0], 0),
+                            ( 0.6959340,  2.2220500, [0, 0, 0], 0)],
+                           [(-0.4210640,  1.2954800, [0, 0, 0], 0),
+                            ( 1.2240700,  0.2688810, [0, 0, 0], 0)],
+                           [(-0.4210640,  1.2954800, [0, 0, 0], 1),
+                            ( 1.2240700,  0.2688810, [0, 0, 0], 1)],
+                           [( 1.0000000,  0.0773500, [0, 0, 0], 0)],
+                           [( 1.0000000,  0.0773500, [0, 0, 0], 1)]]
+        res = compute_integrals(ERI(), basis_functions)
+        @test res ≈ ref atol=1e-7  # TODO That's not a great agreement
+    end
 end

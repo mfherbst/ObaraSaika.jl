@@ -6,7 +6,7 @@ function compute_integrals(::ERI, basis_functions)
     # Build list of unique primitives
     primitives = [(ζ, P, λ) for cgto in basis_functions
                   for (c, ζ, P, λ) in cgto]
-    primitives = unique(sort(primitives))
+    primitives = unique(sort(primitives, by=reverse))
 
     # TODO compute product of contraction and normalisation here
 
@@ -63,14 +63,18 @@ function compute_integrals(::ERI, basis_functions)
     # Total number of cartesian cgto basis functions
     # fun[1][4] == λ of the first contracted GTO, assumed to be the same in all
     # primitives (which is true, but should have a better interface)
-    n_s = findall(fun -> fun[1][4] == 0, basis_functions)  # Total number of s functions
-    n_p = findall(fun -> fun[1][4] == 1, basis_functions)  # Total number of p functions
+    n_s = count(fun -> fun[1][4] == 0, basis_functions)  # Total number of s functions
+    n_p = count(fun -> fun[1][4] == 1, basis_functions)  # Total number of p functions
     n_bas = sum(basis_functions) do fun
         c, ζ, P, λ = fun[1]  # λ of first primitive == λ of full cgto
         @assert λ ≤ 1
         3^λ
     end
 
+    n_p > 0 && error("wrong here!")
+    # FIXME This uses the (incorrect) assumption that p functions
+    #       always come *after* the s functions ... this is only true for the
+    #       primitives!
     function cgto_range(λ, ibas)
         λ == 0 && return ibas:ibas
         inp = (ibas - n_s - 1)
@@ -94,19 +98,16 @@ function compute_integrals(::ERI, basis_functions)
             quad = (ζabcd, Pabcd, wζabcd, (ζab, ζcd),
                     (Pab, Pcd), (Kab, Kcd), λabcd, centres)
 
-            results = Dict{NTuple{4, Int}, Array{T, 5}}()
+            # TODO This obviously needs to be generalised for higher AM functions
+            #      Is it true that the symmetrised loop (0,0,0,0) to λabcd will always cut it here?
+            interm = Dict{NTuple{4, Int}, Array{T, 5}}()  # Intermediates
+            for λtest in ((0, 0, 0, 0), (1, 0, 0, 0), (1, 0, 1, 0),
+                          (1, 1, 0, 0), (1, 1, 1, 0), (1, 1, 1, 1))
+                all(λabcd .≥ λtest) || break
+                interm[λtest] = compute_intermediate(ERI(), Val(λtest), quad, interm)
+            end
 
-            results[(0, 0, 0, 0)] = compute_intermediate(ERI(), Val((0, 0, 0, 0)),
-                                                         quad, results)
-
-            # First do the s integrals
-            # Then do the (ps | ss) integrals (if needed for current batch)
-            # Then do the (ps | ps) integrals (if needed for current batch)
-            # Then do the (pp | ss) integrals (if needed for current batch)
-            # Then do the (pp | ps) integrals (if needed for current batch)
-            # Then do the (pp | pp) integrals (if needed for current batch)
-
-            coeffs = results[(0, 0, 0, 0)]
+            coeffs = interm[λabcd]
             m_max = size(coeffs, 5) - 1
             auxvec = auxilary_vector.(Ref(ERI()), 0:m_max, Ref(quad))
             auxvec = reshape(auxvec, 1, 1, 1, 1, m_max + 1)
@@ -153,26 +154,33 @@ function compute_normalisation(ζ::T, λ) where T <: Real
     (2ζ / T(π))^(3 / T(4)) * (4ζ)^(sum(λ) / T(2)) / T(dfacs)
 end
 
+# TODO The formulas for the p functions
+#      have not been checked properly and might be wrong
+
 # Compute (ps, ss) intermediate
-function compute_intermediate(::ERI, ::Val{(1, 0, 0, 0)}, quad, results::Dict)
+function compute_intermediate(::ERI, ::Val{(1, 0, 0, 0)}, quad, interm::Dict)
     ζabcd, Pabcd, wζabcd, (ζab, ζcd), (Pab, Pcd), (Kab, Kcd), λabcd, centres = quad
     Pa, Pb, Pc, Pd = centres
 
-    Pa    = reshape(Pa,    3, 1, 1, 1)
-    Pab   = reshape(Pab,   3, 1, 1, 1)
-    Pabcd = reshape(Pabcd, 3, 1, 1, 1)
+    #                                     Note for future generalisation:
+    Pa    = reshape(Pa,    3, 1, 1, 1)  # These have the shape of the centre
+    Pab   = reshape(Pab,   3, 1, 1, 1)  # to be lowered and the data comes
+    Pabcd = reshape(Pabcd, 3, 1, 1, 1)  # also from the centre to be lowered
 
     #           i  j  k  l  m
     out = zeros(3, 1, 1, 1, 2)
+    # A bit annoying here is that out[:, :, :, :, 1] is actually m=0
     @. begin
-        out[:, :, :, :, 1] = (Pab   - Pa ) * results[(0, 0, 0, 0)]
-        out[:, :, :, :, 2] = (Pabcd - Pab) * results[(0, 0, 0, 0)]
+        # (psss) coefficient for m=0
+        out[:, :, :, :, 1:1] = (Pab   - Pa ) * interm[(0, 0, 0, 0)]
+        # (psss) coefficient for m=1
+        out[:, :, :, :, 2:2] = (Pabcd - Pab) * interm[(0, 0, 0, 0)]
     end
     return out
 end
 
 # Compute (ps, ps) intermediate
-function compute_intermediate(::ERI, ::Val{(1, 0, 1, 0)}, quad, results::Dict)
+function compute_intermediate(::ERI, ::Val{(1, 0, 1, 0)}, quad, interm::Dict)
     ζabcd, Pabcd, wζabcd, (ζab, ζcd), (Pab, Pcd), (Kab, Kcd), λabcd, centres = quad
     Pa, Pb, Pc, Pd = centres
 
@@ -183,18 +191,20 @@ function compute_intermediate(::ERI, ::Val{(1, 0, 1, 0)}, quad, results::Dict)
     #           i  j  k  l  m
     out = zeros(3, 1, 3, 1, 3)
     @. begin
-        out[:, :, :, :, 1:2] += (Pcd   - Pc ) * results[(1, 0, 0, 0)]
-        out[:, :, :, :, 2:3] += (Pabcd - Pcd) * results[(1, 0, 0, 0)]
+        out[:, :, :, :, 1:2] += (Pcd   - Pc ) * interm[(1, 0, 0, 0)]
+        # (psss)^(0) has a coefficient for m=0 and m=1, but we want (psss)^(1),
+        # so just shift the m-range where we set the values one up.
+        out[:, :, :, :, 2:3] += (Pabcd - Pcd) * interm[(1, 0, 0, 0)]
 
         for i in 1:3
-            out[i, :, i, :, 2] += results[(0, 0, 0, 0)] / 2ζabcd
+            out[i, :, i, :, 2] += interm[(0, 0, 0, 0)] / 2ζabcd
         end
     end
     out
 end
 
 # Compute (pp, ss) intermediate
-function compute_intermediate(::ERI, ::Val{(1, 1, 0, 0)}, quad, results::Dict)
+function compute_intermediate(::ERI, ::Val{(1, 1, 0, 0)}, quad, interm::Dict)
     ζabcd, Pabcd, wζabcd, (ζab, ζcd), (Pab, Pcd), (Kab, Kcd), λabcd, centres = quad
     Pa, Pb, Pc, Pd = centres
 
@@ -205,21 +215,64 @@ function compute_intermediate(::ERI, ::Val{(1, 1, 0, 0)}, quad, results::Dict)
     #           i  j  k  l  m
     out = zeros(3, 3, 1, 1, 3)
     @. begin
-        out[:, :, :, :, 1:2] += (Pab   - Pb ) * results[(1, 0, 0, 0)]
-        out[:, :, :, :, 2:3] += (Pabcd - Pab) * results[(1, 0, 0, 0)]
+        out[:, :, :, :, 1:2] += (Pab   - Pb ) * interm[(1, 0, 0, 0)]
+        out[:, :, :, :, 2:3] += (Pabcd - Pab) * interm[(1, 0, 0, 0)]
 
         for i in 1:3
-            out[i, :, i, :, 1] += results[(0, 0, 0, 0)] / 2ζabcd
-            out[i, :, i, :, 2] -= results[(0, 0, 0, 0)] * wζabcd / ζabcd
+            out[i, i, :, :, 1] += interm[(0, 0, 0, 0)] / 2ζab
+            out[i, i, :, :, 2] -= interm[(0, 0, 0, 0)] * wζabcd / ζab
         end
     end
     out
 end
 
-# ppps
-# pppp
+# Compute (pp, ps) intermediate
+function compute_intermediate(::ERI, ::Val{(1, 1, 1, 0)}, quad, interm::Dict)
+    ζabcd, Pabcd, wζabcd, (ζab, ζcd), (Pab, Pcd), (Kab, Kcd), λabcd, centres = quad
+    Pa, Pb, Pc, Pd = centres
 
+    Pc    = reshape(Pc,    1, 1, 3, 1)
+    Pcd   = reshape(Pcd,   1, 1, 3, 1)
+    Pabcd = reshape(Pabcd, 1, 1, 3, 1)
 
+    #           i  j  k  l  m
+    out = zeros(3, 3, 3, 1, 4)
+    @. begin
+        out[:, :, :, :, 1:3] += (Pcd   - Pc ) * interm[(1, 1, 0, 0)]
+        out[:, :, :, :, 2:4] += (Pabcd - Pcd) * interm[(1, 1, 0, 0)]
+
+        for i in 1:3
+            out[i, :, i, :, 2:3] += permutedims(interm[(1, 0, 0, 0)], [2, 1, 3, 4, 5]) / 2ζabcd
+            out[:, i, i, :, 2:3] += interm[(1, 0, 0, 0)] / 2ζabcd
+        end
+    end
+    out
+end
+
+# Compute (pp, pp) intermediate
+function compute_intermediate(::ERI, ::Val{(1, 1, 1, 1)}, quad, interm::Dict)
+    ζabcd, Pabcd, wζabcd, (ζab, ζcd), (Pab, Pcd), (Kab, Kcd), λabcd, centres = quad
+    Pa, Pb, Pc, Pd = centres
+
+    Pd    = reshape(Pd,    1, 1, 1, 3)
+    Pcd   = reshape(Pcd,   1, 1, 1, 3)
+    Pabcd = reshape(Pabcd, 1, 1, 1, 3)
+
+    #           i  j  k  l  m
+    out = zeros(3, 3, 3, 3, 5)
+    @. begin
+        out[:, :, :, :, 1:4] += (Pcd   - Pd ) * interm[(1, 1, 1, 0)]
+        out[:, :, :, :, 2:5] += (Pabcd - Pcd) * interm[(1, 1, 1, 0)]
+
+        for i in 1:3
+            out[i, :, :, i, 2:4] += permutedims(interm[(1, 0, 1, 0)], [2, 1, 3, 4, 5]) / 2ζabcd
+            out[:, i, :, i, 2:4] += interm[(1, 0, 1, 0)] / 2ζabcd
+            out[:, :, i, i, 1:3] += interm[(1, 1, 0, 0)] / 2ζcd
+            out[:, :, i, i, 2:5] -= interm[(1, 1, 0, 0)] * wζabcd / ζcd
+        end
+    end
+    out
+end
 
 # The auxiliary integral
 function compute_intermediate(::ERI, ::Val{(0, 0, 0, 0)}, quad, ::Dict)
